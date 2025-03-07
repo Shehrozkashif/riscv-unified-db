@@ -17,10 +17,15 @@ extensions:
   $inherits: "profile/RVB23U64.yaml#/extensions"
   $remove:
     - Zvkg
-    - Zvknc
-    - Zvksc
+    - Zvknc  # RVA23 does not include Zvknc because it mandates the higher-performing
+             # but more expensive GHASH options when adding vector crypto.
+    - Zvksc  # RVA23 does not include Zvksc because it mandates the higher-performing
+             # but more expensive GHASH options when adding vector crypto.
     - Zkn
     - Zks
+  #########################################################################
+  # OPTIONAL DEVELOPMENT extensions in RVB23
+  #########################################################################  
 
   #########################################################################
   # MANDATORY extensions in RVA23U64 (that were optional in RVB23U64)
