@@ -36,8 +36,8 @@ operation(): |
       raise(ExceptionCode::IllegalInstruction, mode(), $encoding);
   }
 
-  XReg virtual_address = X[rs1] + imm;
-
+  XReg virtual_address = X[creg2reg(rs1)] + imm;
+  
   if (XLEN == 32) {
       if (implemented?(ExtensionName::Zclsd)) {
           if (rs2 % 2 != 0) {
@@ -50,5 +50,5 @@ operation(): |
           raise(ExceptionCode::IllegalInstruction, mode(), $encoding);
       }
   } else {
-      write_memory<64>(virtual_address, X[rs2], $encoding);
+      write_memory<64>(virtual_address, X[creg2reg(rs2)], $encoding);
   }
