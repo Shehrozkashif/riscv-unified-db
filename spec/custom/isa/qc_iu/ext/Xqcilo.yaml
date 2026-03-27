@@ -11,7 +11,7 @@ long_name: Qualcomm large offset load/store
 versions:
 - version: "0.1.0"
   state: development
-  ratification_date: null
+  ratification_date: unknown
   contributors:
   - name: Albert Yosher
     company: Qualcomm Technologies, Inc.
@@ -21,7 +21,7 @@ versions:
     email: dhower@qti.qualcomm.com
 - version: "0.2.0"
   state: frozen
-  ratification_date: null
+  ratification_date: unknown
   contributors:
   - name: Albert Yosher
     company: Qualcomm Technologies, Inc.
@@ -31,10 +31,11 @@ versions:
     email: dhower@qti.qualcomm.com
   changes:
     - Add information about instruction formats of each instruction
-  requires: { name: Zca, version: ">= 1.0.0" }
+  requirements:
+    extension: { name: Zca, version: ">= 1.0.0" }
 - version: "0.3.0"
   state: frozen
-  ratification_date: null
+  ratification_date: unknown
   contributors:
   - name: Albert Yosher
     company: Qualcomm Technologies, Inc.
@@ -54,3 +55,5 @@ doc_license:
 company:
   name: Qualcomm Technologies, Inc.
   url: https://qualcomm.com
+requirements:
+  xlen: 32

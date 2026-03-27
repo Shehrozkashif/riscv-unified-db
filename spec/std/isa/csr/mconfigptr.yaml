@@ -43,8 +43,9 @@ description: |
 priv_mode: M
 length: MXLEN
 definedBy:
-  name: Sm
-  version: ">=1.12"
+  extension:
+    name: Sm
+    version: ">=1.12"
 fields:
   ADDRESS:
     location_rv32: 31-0
@@ -55,6 +56,3 @@ fields:
     type: RO
     reset_value(): |
       return CONFIG_PTR_ADDRESS;
-    legal?(csr_value): |
-      # pointer must be naturally aligned to MXLEN
-      return ((MXLEN-1) | csr_value.ADDRESS) == 0;

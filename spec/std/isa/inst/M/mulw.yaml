@@ -19,8 +19,12 @@ description: |
   must have their upper 32 bits clear. If the arguments are not known to be sign- or zero-extended,
   an alternative is to shift both arguments left by 32 bits, then use MULH[[S]U].
 definedBy:
-  anyOf: [M, Zmmul]
-base: 64
+  allOf:
+    - xlen: 64
+    - extension:
+        anyOf:
+          - name: M
+          - name: Zmmul
 assembly: xd, xs1, xs2
 encoding:
   match: 0000001----------000-----0111011
@@ -50,26 +54,3 @@ operation(): |
 
   # return the sign-extended result
   X[xd] = {{32{sign_bit}}, result};
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    if extension("M") | haveZmmul() then {
-      let rs1_val = X(rs1)[31..0];
-      let rs2_val = X(rs2)[31..0];
-      let rs1_int : int = signed(rs1_val);
-      let rs2_int : int = signed(rs2_val);
-      /* to_bits requires expansion to 64 bits followed by truncation */
-      let result32 = to_bits(64, rs1_int * rs2_int)[31..0];
-      let result : xlenbits = sign_extend(result32);
-      X(rd) = result;
-      RETIRE_SUCCESS
-    } else {
-      handle_illegal();
-      RETIRE_FAIL
-    }
-  }
-
-# SPDX-SnippetEnd

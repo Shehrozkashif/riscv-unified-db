@@ -12,9 +12,8 @@ description: |
   This instruction takes the one's complement of xd'/xs1' and writes the result to the same register.
 
 definedBy:
-  anyOf:
-    - Zcb
-    - Zce
+  extension:
+    name: Zcb
 assembly: xd
 encoding:
   match: 100111---1110101
@@ -33,14 +32,3 @@ operation(): |
   }
 
   X[creg2reg(xd)] = ~X[creg2reg(xd)];
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    X(rsdc) = X(rsdc) XOR -1;
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

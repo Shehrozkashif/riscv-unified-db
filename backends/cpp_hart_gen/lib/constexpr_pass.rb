@@ -1,3 +1,4 @@
+# typed: false
 # frozen_string_literal: true
 
 module Idl
@@ -10,6 +11,12 @@ module Idl
       end
     end
   end
+  class TrueExpressionAst < AstNode
+    def constexpr?(symtab) = true
+  end
+  class FalseExpressionAst < AstNode
+    def constexpr?(symtab) = true
+  end
   class IdAst < AstNode
     def constexpr?(symtab)
       sym = symtab.get(name)
@@ -20,8 +27,6 @@ module Idl
       if sym.param?
         p = symtab.param(text_value)
         T.must(p).value_known?
-      elsif sym.template_value?
-        true
       else
         !sym.type.global?
       end
@@ -31,7 +36,9 @@ module Idl
     def constexpr?(symtab) = false
   end
   class FunctionCallExpressionAst < AstNode
-    def constexpr?(symtab) = false # conservative, can do better...
+    def constexpr?(symtab)
+      false # conservative, can do better...
+    end
   end
   class CsrFieldReadExpressionAst < AstNode
     def constexpr?(symtab) = false

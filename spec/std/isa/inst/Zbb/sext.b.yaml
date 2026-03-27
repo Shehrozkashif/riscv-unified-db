@@ -10,7 +10,9 @@ long_name: Sign-extend byte
 description: |
   Sign-extends the least-significant byte in the source to XLEN by copying the
   most-significant bit in the byte (i.e., bit 7) to all of the more-significant bits.
-definedBy: Zbb
+definedBy:
+  extension:
+    name: Zbb
 assembly: xd, xs1
 encoding:
   match: 011000000100-----001-----0010011
@@ -34,20 +36,3 @@ operation(): |
   } else if (xlen() == 64) {
     X[xd] = {{56{X[xs1][7]}}, X[xs1][7:0]};
   }
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let rs1_val = X(rs1);
-    let result : xlenbits = match op {
-      RISCV_SEXTB => sign_extend(rs1_val[7..0]),
-      RISCV_SEXTH => sign_extend(rs1_val[15..0]),
-      RISCV_ZEXTH => zero_extend(rs1_val[15..0])
-    };
-    X(rd) = result;
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

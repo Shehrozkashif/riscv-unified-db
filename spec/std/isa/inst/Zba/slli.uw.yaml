@@ -13,8 +13,11 @@ description: |
 
   [NOTE]
   This instruction is the same as `slli` with `zext.w` performed on xs1 before shifting.
-definedBy: Zba
-base: 64
+definedBy:
+  allOf:
+    - xlen: 64
+    - extension:
+        name: Zba
 encoding:
   match: 000010-----------001-----0011011
   variables:
@@ -36,16 +39,3 @@ operation(): |
   }
 
   X[xd] = X[xs1][31:0] << shamt;
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let rs1_val = X(rs1);
-    let result : xlenbits = zero_extend(rs1_val[31..0]) << shamt;
-    X(rd) = result;
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

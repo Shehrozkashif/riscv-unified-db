@@ -6,31 +6,13 @@
 # generic utility functions
 
 function power_of_2? {
-  template U32 N
   returns Boolean
-  arguments Bits<N> value
+  arguments XReg value
   description {
     Returns true if value is a power of two, false otherwise
   }
   body {
     return (value != 0) && ((value & (value - 1)) == 0);
-  }
-}
-
-function ary_includes? {
-  template U32 ARY_SIZE, U32 ELEMENT_SIZE
-  returns Boolean
-  arguments Bits<ELEMENT_SIZE> ary[ARY_SIZE], Bits<ELEMENT_SIZE> value
-  description {
-    Returns true if _value_ is an element of ary, and false otherwise
-  }
-  body {
-    for (U32 i = 0; i < ARY_SIZE; i++) {
-      if (ary[i] == value) {
-        return true;
-      }
-    }
-    return false;
   }
 }
 
@@ -44,6 +26,42 @@ function has_virt_mem? {
            implemented?(ExtensionName::Sv39) ||
            implemented?(ExtensionName::Sv48) ||
            implemented?(ExtensionName::Sv57);
+  }
+}
+
+function max_va_size {
+  returns Bits<8>
+  description {
+    Returns the largest possible Virtual Address width in any supported translation mode.
+
+    The max VA is determined by physical address size when in M mode or S-mode with Bare translation.
+    Otherwise, max VA is the size of a virtual address in the largest supported Sv* mode.
+
+    Return the largest that applies.
+  }
+  body {
+    Bits<8> translated_va_size = 0;
+    if (implemented?(ExtensionName::Sv57)) {
+      translated_va_size = 57;
+    } else if (implemented?(ExtensionName::Sv48)) {
+      translated_va_size = 48;
+    } else if (implemented?(ExtensionName::Sv39)) {
+      translated_va_size = 39;
+    } else if (implemented?(ExtensionName::Sv32)) {
+      translated_va_size = 32;
+    }
+
+    if (PHYS_ADDR_WIDTH > translated_va_size) {
+      # max va is determined by physical address
+      if (PHYS_ADDR_WIDTH > MXLEN) {
+        return MXLEN;
+      } else {
+        return PHYS_ADDR_WIDTH;
+      }
+    } else {
+      # max va is determined by translated virtual address
+      return translated_va_size;
+    }
   }
 }
 
@@ -108,11 +126,11 @@ function bit_length {
 }
 
 function count_leading_zeros {
-  template U32 N
   returns
-    Bits<bit_length(N)>  # Number of leading zeros in +value+
+    XReg  # Number of leading zeros in +value+
   arguments
-    Bits<N> value        # value to count zero in
+    U32 N,               # bit width
+    XReg value           # value to count zero in
   description {
     Returns the number of leading 0 bits before the most-significant 1 bit of +value+,
     or N if value is zero.
@@ -155,9 +173,8 @@ function sext {
 }
 
 function is_naturally_aligned {
-  template U32 N
   returns Boolean
-  arguments XReg value
+  arguments U32 N, XReg value
   description {
     Checks if value is naturally aligned to N bits.
   }
@@ -170,9 +187,9 @@ function is_naturally_aligned {
 }
 
 function in_naturally_aligned_region? {
-  template U32 N
   returns Boolean
   arguments
+    U32  N,         # alignment size in bits
     XReg address,   # starting address
     U32  length     # length of the access
   description {

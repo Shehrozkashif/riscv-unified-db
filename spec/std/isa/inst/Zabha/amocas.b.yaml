@@ -1,4 +1,8 @@
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+
+# WARNING: This file is auto-generated from spec/std/isa/inst/Zacas/amocas.SIZE.AQRL.layout
+
+# Copyright (c) Abhijit Das(Sukuna0007Abhi)
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 # yaml-language-server: $schema=../../../../schemas/inst_schema.json
@@ -6,18 +10,21 @@
 $schema: "inst_schema.json#"
 kind: instruction
 name: amocas.b
-long_name: No synopsis available
+long_name: Atomic compare-and-swap byte
 description: |
-  No description available.
-definedBy: Zabha
+  Atomically:
+
+    * Load the byte at address _xs1_
+    * Write the sign-extended value into _xd_
+    * Compare the loaded value with the least-significant byte of register _xs2_
+    * If equal, write the least-significant byte of register _xs2+1_ to the address in _xs1_
+definedBy:
+  extension:
+    name: Zabha
 assembly: xd, xs2, (xs1)
 encoding:
-  match: 00101------------000-----0101111
+  match: 0010100----------000-----0101111
   variables:
-    - name: aq
-      location: 26-26
-    - name: rl
-      location: 25-25
     - name: xs2
       location: 24-20
     - name: xs1
@@ -29,5 +36,11 @@ access:
   u: always
   vs: always
   vu: always
-data_independent_timing: false
 operation(): |
+  if (!implemented?(ExtensionName::Zabha)) {
+    raise (ExceptionCode::IllegalInstruction, mode(), $encoding);
+  }
+
+  XReg virtual_address = X[xs1];
+  # TODO
+  # X[xd] = amocas8(virtual_address, X[xs2][7:0], X[xd][7:0], 1'b0, 1'b0, $encoding);

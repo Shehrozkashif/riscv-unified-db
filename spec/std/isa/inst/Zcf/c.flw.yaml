@@ -13,13 +13,9 @@ description: |
   to the base address in register xs1.
   It expands to `flw` `fd, offset(xs1)`.
 definedBy:
-  anyOf:
-    - allOf:
-        - C
-        - F
-    - Zcf
+  extension:
+    name: Zcf
 assembly: fd, imm(xs1)
-base: 32
 encoding:
   match: 011-----------00
   variables:
@@ -42,4 +38,4 @@ operation(): |
 
   XReg virtual_address = X[creg2reg(xs1)] + imm;
 
-  X[creg2reg(fd)] = sext(read_memory<32>(virtual_address, $encoding), 32);
+  X[creg2reg(fd)] = sext(read_memory(32, virtual_address, $encoding), 32);

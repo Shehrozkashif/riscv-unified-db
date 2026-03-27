@@ -14,9 +14,12 @@ description: |
   It expands to `sd` `xs2, offset(x2)`.
 definedBy:
   anyOf:
-    - C
-    - Zca
-    - Zclsd
+    - allOf:
+        - xlen: 64
+        - extension:
+            name: Zca
+    - extension:
+        name: Zclsd
 assembly: xs2, imm(sp)
 encoding:
   RV32:
@@ -51,10 +54,10 @@ operation(): |
   if (xlen() == 32) {
     if (implemented?(ExtensionName::Zclsd)) {
       Bits<64> data = {X[creg2reg(xs2) + 1], X[creg2reg(xs2)]};
-      write_memory<64>(virtual_address, data, $encoding);
+      write_memory(64, virtual_address, data, $encoding);
     } else {
       raise(ExceptionCode::IllegalInstruction, mode(), $encoding);
     }
   } else {
-    write_memory<64>(virtual_address, X[creg2reg(xs2)], $encoding);
+    write_memory(64, virtual_address, X[creg2reg(xs2)], $encoding);
   }

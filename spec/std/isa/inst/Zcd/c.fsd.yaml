@@ -13,11 +13,8 @@ description: |
   to the base address in register xs1.
   It expands to `fsd` `fs2, offset(xs1)`.
 definedBy:
-  anyOf:
-    - allOf:
-        - C
-        - D
-    - Zcd
+  extension:
+    name: Zcd
 assembly: fs2, imm(xs1)
 encoding:
   match: 101-----------00
@@ -41,4 +38,4 @@ operation(): |
 
   XReg virtual_address = X[creg2reg(xs1)] + imm;
 
-  write_memory<64>(virtual_address, X[creg2reg(fs2)], $encoding);
+  write_memory(64, virtual_address, X[creg2reg(fs2)], $encoding);

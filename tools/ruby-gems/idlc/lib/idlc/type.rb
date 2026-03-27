@@ -10,6 +10,11 @@ module Idl
 
   class AstNode; end
   class EnumDefinitionAst < AstNode; end
+  class Type; end
+  class EnumerationType < Type; end
+  module Csr
+    include Kernel
+  end
 
   # Data types
   class Type
@@ -26,7 +31,6 @@ module Idl
       :array,    # array of other types
       :tuple,    # tuple of other dissimilar types
       :function, # function
-      :template_function, # template function, where the template arguments are known but template values need to be applied to become a full function
       :csr,      # a CSR register type
       :dontcare, # matches everything
       :string    # fixed-length character string
@@ -35,8 +39,7 @@ module Idl
       :const,
       :signed,
       :global,
-      :known,
-      :template_var
+      :known
     ].freeze
 
     # true for any type that can generally be treated as a scalar integer
@@ -45,9 +48,22 @@ module Idl
       @kind == :bits
     end
 
+    def ==(other)
+      return false unless other.is_a?(Type)
+
+      case other.kind
+      when :bits
+        @kind == :bits && @width == other.width
+      when :enum_ref
+        @kind == :enum_ref && T.must(@enum_class).name == other.name
+      else
+        raise "TODO: Type == for #{other.kind}"
+      end
+    end
+
     def runtime?
       if @kind == :array
-        @sub_type.runtime?
+        T.must(@sub_type).runtime?
       else
         @kind == :bits && @width == :unknown
       end
@@ -63,12 +79,12 @@ module Idl
         if @width == :unknown
           Array.new
         else
-          Array.new(@width, sub_type.default)
+          Array.new(T.cast(@width, Integer), sub_type.default)
         end
       when :string
         ""
       when :enum_ref
-        @enum_class.element_values.min
+        T.must(@enum_class).element_values.min
       when :enum
         raise "?"
       else
@@ -79,23 +95,26 @@ module Idl
     sig { returns(Symbol) }
     attr_reader :kind
 
-    sig { returns(T::Array[Symbol])}
+    sig { returns(T::Array[Symbol]) }
     attr_reader :qualifiers
 
     sig { returns(T.any(Integer, Symbol)) }
-    attr_reader :width
+    def width = T.must(@width)
 
     sig { returns(T.nilable(AstNode)) }
     attr_reader :width_ast
 
+    sig { returns(T.nilable(Integer)) }
+    attr_reader :max_width
+
     sig { returns(Type) }
-    attr_reader :sub_type
+    def sub_type = T.must(@sub_type)
 
     sig { returns(T::Array[Type]) }
-    attr_reader :tuple_types
+    def tuple_types = T.must(@tuple_types)
 
     sig { returns(EnumerationType) }
-    attr_reader :enum_class
+    def enum_class = T.must(@enum_class)
 
     def qualify(qualifier)
       @qualifiers << qualifier
@@ -105,18 +124,30 @@ module Idl
 
     def self.from_typename(type_name, cfg_arch)
       case type_name
-      when 'XReg'
-        return Type.new(:bits, width: cfg_arch.param_values["MXLEN"])
-      when 'FReg'
-        return Type.new(:freg, width: 32)
-      when 'DReg'
-        return Type.new(:dreg, width: 64)
+      when "XReg"
+        return Type.new(:bits, width: cfg_arch.param_values.key?("MXLEN") ? cfg_arch.param_values.fetch("MXLEN") : :unknown, max_width: 64)
       when /Bits<((?:0x)?[0-9a-fA-F]+)>/
         Type.new(:bits, width: $1.to_i)
       end
     end
 
-    def initialize(kind, qualifiers: [], width: nil, width_ast: nil, max_width: nil, sub_type: nil, name: nil, tuple_types: nil, return_type: nil, arguments: nil, enum_class: nil, csr: nil)
+    sig {
+      params(
+        kind: Symbol,
+        qualifiers: T::Array[Symbol],
+        width: T.nilable(T.any(Integer, Symbol)),
+        width_ast: T.nilable(AstNode),
+        max_width: T.nilable(Integer),
+        sub_type: T.nilable(Type),
+        name: T.nilable(String),
+        tuple_types: T.nilable(T::Array[Type]),
+        return_type: T.nilable(Type),
+        enum_class: T.nilable(EnumerationType),
+        csr: T.nilable(Csr)
+      )
+      .void
+    }
+    def initialize(kind, qualifiers: [], width: nil, width_ast: nil, max_width: nil, sub_type: nil, name: nil, tuple_types: nil, return_type: nil, enum_class: nil, csr: nil)
       raise "Invalid kind '#{kind}'" unless KINDS.include?(kind)
 
       @kind = kind
@@ -127,7 +158,6 @@ module Idl
 
       raise "Should be a FunctionType" if kind == :function && !self.is_a?(FunctionType)
 
-      raise "Width must be an Integer, is a #{width.class}" unless width.nil? || width.is_a?(Integer) || width == :unknown
       @width = width
       @width_ast = width_ast
       @max_width = max_width
@@ -138,16 +168,16 @@ module Idl
       @name = name
       if kind == :bits
         raise "Bits type must have width" unless @width
-        raise "Bits type must have positive width" unless @width == :unknown || T.cast(@width, Integer).positive?
+        raise "Bits type must have positive width (has #{@width})" unless @width == :unknown || T.cast(@width, Integer).positive?
       end
       if kind == :enum
         raise "Enum type must have width" unless @width
       end
-      if kind == :array
+      if kind == :array && width != 0
         raise "Array must have a subtype" unless @sub_type
       end
       if kind == :csr
-        raise 'CSR type must have a csr argument' if csr.nil?
+        raise "CSR type must have a csr argument" if csr.nil?
 
         @csr = csr
         raise "CSR types must have a width" if width.nil?
@@ -160,7 +190,7 @@ module Idl
     def clone
       Type.new(
         @kind,
-        qualifiers: @qualifiers&.map(&:clone),
+        qualifiers: @qualifiers.map(&:clone),
         width: @width,
         sub_type: @sub_type&.clone,
         name: @name.dup,
@@ -184,8 +214,8 @@ module Idl
         return type.kind == :boolean
       when :enum_ref
         return \
-          (type.kind == :enum_ref && type.enum_class.name == @enum_class.name) \
-          || (type.kind == :enum && type.name == @enum_class.name)
+          (type.kind == :enum_ref && type.enum_class.name == T.must(@enum_class).name) \
+          || (type.kind == :enum && type.name == T.must(@enum_class).name)
       when :bits
         return type.convertable_to?(self) && (signed? == type.signed?)
       when :enum
@@ -215,7 +245,7 @@ module Idl
       when :boolean
         type.kind == :boolean
       when :enum_ref
-        type.kind == :enum_ref && type.name == @enum_class.name
+        type.kind == :enum_ref && type.name == T.must(@enum_class).name
       when :dontcare
         true
       when :bits
@@ -254,8 +284,8 @@ module Idl
         return type.kind == :boolean
       when :enum_ref
         return \
-          (type.kind == :enum && type.name == @enum_class.name) || \
-          (type.kind == :enum_ref && type.enum_class.name == @enum_class.name)
+          (type.kind == :enum && type.name == T.must(@enum_class).name) || \
+          (type.kind == :enum_ref && type.enum_class.name == T.must(@enum_class).name)
       when :dontcare
         return true
       when :bits
@@ -263,7 +293,7 @@ module Idl
           warn "You seem to be missing an $enum cast"
           return false
         end
-        return type.kind != :boolean
+        return type.kind == :bits || type.kind == :bitfield
       when :enum
         if type.kind == :bits
           return false
@@ -274,10 +304,10 @@ module Idl
           return false
         end
       when :tuple
-        is_tuple_of_same_size = (type.kind == :tuple) && (@tuple_types.size == type.tuple_types.size)
+        is_tuple_of_same_size = (type.kind == :tuple) && (T.must(@tuple_types).size == type.tuple_types.size)
         if is_tuple_of_same_size
-          @tuple_types.each_index do |i|
-            unless @tuple_types[i].convertable_to?(type.tuple_types[i])
+          T.must(@tuple_types).each_index do |i|
+            unless T.must(@tuple_types).fetch(i).convertable_to?(type.tuple_types.fetch(i))
               return false
             end
           end
@@ -332,7 +362,7 @@ module Idl
     end
 
     def to_s
-      ((@qualifiers.nil? || @qualifiers.empty?) ? '' : "#{@qualifiers.map(&:to_s).join(' ')} ") + \
+      ((@qualifiers.empty?) ? "" : "#{@qualifiers.map(&:to_s).join(' ')} ") + \
         if @kind == :bits
           "Bits<#{@width}>"
         elsif @kind == :enum
@@ -340,9 +370,9 @@ module Idl
         elsif @kind == :boolean
           "Boolean"
         elsif @kind == :enum_ref
-          "enum #{@enum_class.name}"
+          "enum #{T.must(@enum_class).name}"
         elsif @kind == :tuple
-          "(#{@tuple_types.map{ |t| t.to_s }.join(',')})"
+          "(#{T.must(@tuple_types).map { |t| t.to_s }.join(',')})"
         elsif @kind == :bitfield
           "bitfield #{@name}"
         elsif @kind == :array
@@ -355,6 +385,8 @@ module Idl
           "string"
         elsif @kind == :struct
           "struct #{T.cast(self, StructType).type_name}"
+        elsif @kind == :function
+          "function #{name}"
         else
           raise @kind.to_s
         end
@@ -368,12 +400,12 @@ module Idl
         @name
       elsif @kind == :bitfield
         @name
-      elsif @kind == :function || @kind == :template_function
+      elsif @kind == :function
         @name
       elsif @kind == :csr
         @csr.name
       elsif @kind == :enum_ref
-        @enum_class.name
+        T.must(@enum_class).name
       else
         raise @kind.to_s
       end
@@ -397,10 +429,6 @@ module Idl
 
     def global?
       @qualifiers.include?(:global)
-    end
-
-    def template_var?
-      @qualifiers.include?(:template_var)
     end
 
     def known?
@@ -438,6 +466,7 @@ module Idl
 
     # @return [Idl::Type] Type of a scalar
     # @param schema [Hash] JSON Schema description of a scalar
+    sig { params(schema: T::Hash[String, T.untyped]).returns(T.nilable(Type)) }
     def self.from_json_schema_scalar_type(schema)
       if schema.key?("type")
         case schema["type"]
@@ -471,14 +500,60 @@ module Idl
         else
           raise "Unhandled const type"
         end
+      elsif schema.key?("enum")
+        raise "Mixed types in enum" unless schema["enum"].all? { |e| e.class == schema["enum"].fetch(0).class }
+
+        case schema["enum"].fetch(0)
+        when TrueClass, FalseClass
+          Type.new(:boolean)
+        when Integer
+          Type.new(:bits, width: schema["enum"].map { |e| e.bit_length }.max)
+        when String
+          Type.new(:string, width: schema["enum"].map { |e| e.length }.max)
+        else
+          raise "unhandled enum type"
+        end
+      elsif schema.key?("allOf")
+        subschema_types = schema.fetch("allOf").map { |subschema| from_json_schema_scalar_type(subschema) }.compact
+        raise "No subschema has a defined type" if subschema_types.empty?
+
+        if subschema_types.fetch(0).kind == :string
+          raise "Subschema types do not agree" unless subschema_types[1..].all? { |t| t.kind == :string }
+
+          subschema_types.fetch(0)
+        elsif subschema_types.fetch(0).kind == :boolean
+          raise "Subschema types do not agree" unless subschema_types[1..].all? { |t| t.kind == :boolean }
+
+          subschema_types.fetch(0)
+        elsif subschema_types.fetch(0).kind == :bits
+          raise "Subschema types do not agree" unless subschema_types[1..].all? { |t| t.kind == :bits }
+
+          unknown_width_type = subschema_types.find { |t| t.width == :unknown }
+          return unknown_width_type unless unknown_width_type.nil?
+
+          subschema_types.max { |t1, t2| t1.width <=> t2.width }
+        else
+          raise "unhandled subschema type"
+        end
+      elsif schema.key?("$ref")
+        if schema.fetch("$ref") == "schema_defs.json#/$defs/uint32"
+          Type.new(:bits, width: 32)
+        elsif schema.fetch("$ref") == "schema_defs.json#/$defs/uint64"
+          Type.new(:bits, width: 64)
+        else
+          raise "unhandled ref: #{schema.fetch("$ref")}"
+        end
+      elsif schema.key?("not")
+        nil
       else
-        raise "unhandled scalar schema"
+        raise "unhandled scalar schema:\n#{schema}"
       end
     end
     private_class_method :from_json_schema_scalar_type
 
     # @return [Idl::Type] Type of array
     # @param schema [Hash] JSON Schema description of an array
+    sig { params(schema: T::Hash[String, T.untyped]).returns(Type) }
     def self.from_json_schema_array_type(schema)
       width = schema["minItems"]
       if !schema.key?("minItems") || !schema.key?("maxItems") || (schema["minItems"] != schema["maxItems"])
@@ -486,13 +561,10 @@ module Idl
       end
 
       if schema["items"].is_a?(Hash)
-        case schema["items"]["type"]
-        when "boolean", "integer", "string"
-          Type.new(:array, width:, sub_type: from_json_schema_scalar_type(schema["items"]))
-        when "array"
-          Type.new(:array, width:, sub_type: from_json_schema_array_type(schema["items"]))
-        end
-      elsif schema["items"].is_a?(Array)
+        Type.new(:array, width:, sub_type: from_json_schema(schema["items"]))
+      else
+        raise "unexpected #{schema}" unless schema["items"].is_a?(Array)
+
         # this ia an array with each element specified
         sub_type = T.let(nil, T.nilable(Type))
         schema["items"].each do |item_schema|
@@ -519,13 +591,20 @@ module Idl
     private_class_method :from_json_schema_array_type
 
     # @returns [Idl::Type] Type described by JSON +schema+
+    sig { params(schema: T::Hash[String, T.untyped]).returns(T.nilable(Type)) }
     def self.from_json_schema(schema)
       hsh = schema.to_h
-      case hsh["type"]
-      when "boolean", "integer", "string"
+      if hsh.key?("type")
+        case hsh["type"]
+        when "boolean", "integer", "string"
+          from_json_schema_scalar_type(hsh)
+        when "array"
+          from_json_schema_array_type(hsh)
+        else
+          raise "unexpected"
+        end
+      else
         from_json_schema_scalar_type(hsh)
-      when "array"
-        from_json_schema_array_type(hsh)
       end
     end
   end
@@ -577,7 +656,7 @@ module Idl
 
     # @return [Integer] The bit width of the enumeration elements
     sig { returns(Integer) }
-    attr_reader :width
+    def width = T.cast(@width, Integer)
 
     # @return [Array<String>] The names of the enumeration elements, in the same order as element_values
     sig { returns(T::Array[String]) }
@@ -621,7 +700,7 @@ module Idl
 
     sig { returns(EnumerationType) }
     def clone
-      EnumerationType.new(@name, @element_names, @element_values)
+      EnumerationType.new(T.must(@name), @element_names, @element_values)
     end
 
     sig { params(element_name: String).returns(T.nilable(Integer)) }
@@ -643,6 +722,7 @@ module Idl
   end
 
   class BitfieldType < Type
+    def width = @field_ranges.map(&:size).reduce(&:+)
     def initialize(type_name, width, field_names, field_ranges)
       super(:bitfield, name: type_name, width:)
 
@@ -697,6 +777,14 @@ module Idl
   class FunctionType < Type
     attr_reader :func_def_ast
 
+    sig {
+      params(
+        func_name: String,
+        func_def_ast: FunctionDefAst,
+        symtab: SymbolTable
+      )
+      .void
+    }
     def initialize(func_name, func_def_ast, symtab)
       super(:function, name: func_name)
       @func_def_ast = func_def_ast
@@ -705,66 +793,26 @@ module Idl
       raise "symtab should be at level 1" unless symtab.levels == 1
     end
 
+    def argument_nodes = @func_def_ast.argument_nodes
+
+    sig {
+      returns(FunctionType)
+    }
     def clone
       FunctionType.new(name, @func_def_ast, @symtab)
     end
 
+    sig { returns(T::Boolean) }
     def builtin? = @func_def_ast.builtin?
 
+    sig { returns(T::Boolean) }
     def generated? = @func_def_ast.generated?
 
+    sig { returns(T::Boolean) }
     def external? = @func_def_ast.external?
 
+    sig { returns(Integer) }
     def num_args = @func_def_ast.num_args
-
-    def type_check_call(template_values, argument_nodes, call_site_symtab, func_call_ast)
-      raise "Missing template values" if templated? && template_values.empty?
-
-      if templated?
-        symtab = apply_template_values(template_values, func_call_ast)
-        apply_arguments(symtab, argument_nodes, call_site_symtab, func_call_ast)
-
-        @func_def_ast.type_check_template_instance(symtab)
-
-        symtab.pop
-        symtab.release
-      else
-        symtab = @symtab.global_clone
-
-        symtab.push(func_call_ast) # to keep things consistent with template functions, push a scope
-
-        apply_arguments(symtab, argument_nodes, call_site_symtab, func_call_ast)
-
-        @func_def_ast.type_check_from_call(symtab)
-        symtab.pop
-        symtab.release
-      end
-    end
-
-    def template_names = @func_def_ast.template_names
-
-    def template_types(symtab) = @func_def_ast.template_types(symtab)
-
-    def templated? = @func_def_ast.templated?
-
-    def apply_template_values(template_values, func_call_ast)
-      func_call_ast.type_error "Missing template values" if templated? && template_values.empty?
-
-      func_call_ast.type_error "wrong number of template values in call to #{name}" unless template_names.size == template_values.size
-
-      symtab = @symtab.global_clone
-
-      func_call_ast.type_error "Symbol table should be at global scope" unless symtab.levels == 1
-
-      symtab.push(func_call_ast)
-
-      template_values.each_with_index do |value, idx|
-        func_call_ast.type_error "template value should be an Integer (found #{value.class.name})" unless value == :unknown || value.is_a?(Integer)
-
-        symtab.add!(template_names[idx], Var.new(template_names[idx], template_types(symtab)[idx], value, template_index: idx, function_name: @func_def_ast.name))
-      end
-      symtab
-    end
 
     # apply the arguments as Vars.
     # then add the value to the Var
@@ -797,13 +845,21 @@ module Idl
 
     # @return [Array<Integer,Boolean>] Array of argument values, if known
     # @return [nil] if at least one argument value is not known
+    sig {
+      params(
+        symtab: SymbolTable,  # global symbol table
+        argument_nodes: T::Array[Rvalue], # arguments
+        call_site_symtab: SymbolTable,  # symbol table at the function call site
+        func_call_ast: FunctionCallExpressionAst
+      ).returns(T.nilable(T::Array[T.any(Integer, T::Boolean, Symbol)]))
+    }
     def argument_values(symtab, argument_nodes, call_site_symtab, func_call_ast)
       idx = 0
       values = []
       @func_def_ast.arguments(symtab).each do |atype, aname|
         func_call_ast.type_error "Missing argument #{idx}" if idx >= argument_nodes.size
         value_result = Idl::AstNode.value_try do
-          values << argument_nodes[idx].value(call_site_symtab)
+          values << argument_nodes.fetch(idx).value(call_site_symtab)
         end
         Idl::AstNode.value_else(value_result) do
           return nil
@@ -813,20 +869,19 @@ module Idl
       values
     end
 
-    # @param template_values [Array<Integer>] Template values for the call, in declaration order
     # @param func_call_ast [FunctionCallExpressionAst] The function call interested in the return type
     # return [Type] type of the call return
     sig {
       params(
-        template_values: T::Array[Integer],
         argument_nodes: T::Array[Rvalue],
         func_call_ast: FunctionCallExpressionAst
       ).returns(Type)
     }
-    def return_type(template_values, argument_nodes, func_call_ast)
+    def return_type(argument_nodes, func_call_ast)
       rtype =
         begin
-          symtab = apply_template_values(template_values, func_call_ast)
+          symtab = @symtab.global_clone
+          symtab.push(func_call_ast)
           @func_def_ast.return_type(symtab)
         ensure
           symtab.pop
@@ -836,8 +891,16 @@ module Idl
       T.must(rtype)
     end
 
-    def return_value(template_values, argument_nodes, call_site_symtab, func_call_ast)
-      symtab = apply_template_values(template_values, func_call_ast)
+    sig {
+      params(
+        argument_nodes: T::Array[Rvalue], # arguments
+        call_site_symtab: SymbolTable,  # symbol table at the function call site
+        func_call_ast: FunctionCallExpressionAst
+      ).returns(T.nilable(T.any(Integer, T::Boolean, Symbol, T::Hash[String, T.untyped])))
+    }
+    def return_value(argument_nodes, call_site_symtab, func_call_ast)
+      symtab = @symtab.global_clone
+      symtab.push(func_call_ast)
       apply_arguments(symtab, argument_nodes, call_site_symtab, func_call_ast)
 
       begin
@@ -850,26 +913,19 @@ module Idl
       value
     end
 
-    # @param template_values [Array<Integer>] Template values to apply, required if {#templated?}
-    # @return [Array<Type>] return types
-    def return_types(template_values, argument_nodes, call_site_symtab, func_call_ast)
-      symtab = apply_template_values(template_values, func_call_ast)
-      apply_arguments(symtab, argument_nodes, call_site_symtab, func_call_ast)
-
-      begin
-        types = @func_def_ast.return_types(symtab)
-      ensure
-        symtab.pop
-        symtab.release
-      end
-      types
-    end
-
-    def argument_type(index, template_values, argument_nodes, call_site_symtab, func_call_ast)
+    sig {
+      params(
+        index: Integer,
+        argument_nodes: T::Array[Rvalue], # arguments
+        call_site_symtab: SymbolTable,  # symbol table at the function call site
+        func_call_ast: FunctionCallExpressionAst
+      ).returns(T.nilable(Type))
+    }
+    def argument_type(index, argument_nodes, call_site_symtab, func_call_ast)
       return nil if index >= @func_def_ast.num_args
 
-      symtab = apply_template_values(template_values, func_call_ast)
-      # apply_arguments(symtab, argument_nodes, call_site_symtab, func_call_ast)
+      symtab = @symtab.global_clone
+      symtab.push(func_call_ast)
 
       begin
         arguments = @func_def_ast.arguments(symtab)
@@ -880,11 +936,17 @@ module Idl
       arguments[index][0]
     end
 
-    def argument_name(index, template_values = [], func_call_ast)
+    sig {
+      params(
+        index: Integer,
+        func_call_ast: FunctionCallExpressionAst
+      ).returns(T.nilable(String))
+    }
+    def argument_name(index, func_call_ast)
       return nil if index >= @func_def_ast.num_args
 
-      symtab = apply_template_values(template_values, func_call_ast)
-      # apply_arguments(symtab, argument_nodes, call_site_symtab)
+      symtab = @symtab.global_clone
+      symtab.push(func_call_ast)
 
       begin
         arguments = @func_def_ast.arguments(symtab)
@@ -895,20 +957,11 @@ module Idl
       arguments[index][1]
     end
 
+    sig {
+      returns(FunctionBodyAst)
+    }
     def body = @func_def_ast.body
   end
-
-  # # a function that is templated, and hasn't been fully typed checked yet
-  # # because it needs to have template arguments resolved
-  # class TemplateFunctionType < Type
-  #   attr_reader :template_types, :ast
-
-  #   def initialize(func_name, template_types, ast)
-  #     super(:template_function, name: func_name, arguments: arguments)
-  #     @template_types = template_types
-  #     @ast = ast
-  #   end
-  # end
 
   # XReg is really a Bits<> type, so we override it just to get
   # prettier prints
@@ -918,11 +971,11 @@ module Idl
     end
 
     def to_s
-      'XReg'
+      "XReg"
     end
 
     def to_cxx
-      'XReg'
+      "XReg"
     end
   end
 

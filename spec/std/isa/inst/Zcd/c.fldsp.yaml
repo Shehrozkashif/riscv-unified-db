@@ -13,11 +13,8 @@ description: |
   to the stack pointer, x2.
   It expands to `fld` `fd, offset(x2)`.
 definedBy:
-  anyOf:
-    - allOf:
-        - C
-        - D
-    - Zcd
+  extension:
+    name: Zcd
 assembly: fd, imm(sp)
 encoding:
   match: 001-----------10
@@ -42,4 +39,4 @@ operation(): |
 
   XReg virtual_address = X[2] + imm;
 
-  f[fd] = read_memory<64>(virtual_address, $encoding);
+  f[fd] = read_memory(64, virtual_address, $encoding);

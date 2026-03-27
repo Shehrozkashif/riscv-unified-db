@@ -5,7 +5,9 @@
 # frozen_string_literal: true
 
 require "sorbet-runtime"
+require "concurrent/atomic/semaphore"
 
+require_relative "log"
 require_relative "type"
 require_relative "interfaces"
 
@@ -17,18 +19,16 @@ module Idl
 
     attr_reader :name, :type, :value
 
-    def initialize(name, type, value = nil, decode_var: false, template_index: nil, function_name: nil, param: false, for_loop_iter: false)
+    def initialize(name, type, value = nil, decode_var: false, function_name: nil, param: false, for_loop_iter: false)
       @name = name
       raise ArgumentError, "Expecting a Type, got #{type.class.name}" unless type.is_a?(Type)
 
       @type = type
-      @type.qualify(:template_var)
       @type.freeze
       @value = value
       raise "unexpected" unless decode_var.is_a?(TrueClass) || decode_var.is_a?(FalseClass)
 
       @decode_var = decode_var
-      @template_index = template_index
       @function_name = function_name
       @param = param
       @for_loop_iter = for_loop_iter
@@ -56,7 +56,7 @@ module Idl
     end
 
     def hash
-      [@name, @type, @value, @decode_var, @template_index, @function_name, @param].hash
+      [@name, @type, @value, @decode_var, @function_name, @param].hash
     end
 
     def to_s
@@ -69,7 +69,6 @@ module Idl
         type.clone,
         value&.clone,
         decode_var: @decode_var,
-        template_index: @template_index,
         function_name: @function_name,
         param: @param
       )
@@ -85,26 +84,6 @@ module Idl
 
     def param?
       @param
-    end
-
-    # @param function_name [#to_s] A function name
-    # @return [Boolean] whether or not this variable is a function template argument from a call site for the function 'function_name'
-    def template_value_for?(function_name)
-      !@template_index.nil? && (function_name.to_s == @function_name)
-    end
-
-    def template_value? = !@template_index.nil?
-
-    # @return [Integer] the template value position
-    # @raise if Var is not a template value
-    def template_index
-      raise "Not a template value" if @template_index.nil?
-
-      @template_index
-    end
-
-    def template_val?
-      !@template_index.nil?
     end
 
     def to_cxx
@@ -134,7 +113,7 @@ module Idl
     def hash
       return @frozen_hash unless @frozen_hash.nil?
 
-      [@scopes.hash, @name.hash].hash
+      object_id
     end
 
     class EnumDef < T::Struct
@@ -151,11 +130,28 @@ module Idl
       end
     end
 
+    PossibleXlensCallbackType = T.type_alias { T.proc.returns(T::Array[Integer]) }
+
     sig { returns(T::Boolean) }
-    def multi_xlen? = @possible_xlens.size > 1
+    def multi_xlen? = possible_xlens.size > 1
+
+    class MemoizedState < T::Struct
+      prop :possible_xlens, T.nilable(T::Array[Integer])
+      prop :params_hash, T.nilable(T::Hash[String, RuntimeParam])
+    end
 
     sig { returns(T::Array[Integer]) }
-    attr_reader :possible_xlens
+    def possible_xlens
+      @memo.possible_xlens ||=
+        begin
+          if @possible_xlens_cb.nil?
+            Idl.logger.error "Symbol table was not initialized with a possible xlens callback, so #possible_xlens is not available"
+            raise
+          end
+
+          @possible_xlens_cb.call
+        end
+    end
 
     ImplementedCallbackType = T.type_alias { T.proc.params(arg0: String).returns(T.nilable(T::Boolean)) }
 
@@ -184,6 +180,8 @@ module Idl
       prop :implemented_csr, ImplementedCsrCallbackType
     end
 
+    attr_reader :builtin_funcs
+
     sig { params(csr_name: String).returns(T::Boolean) }
     def csr?(csr_name) = csr_hash.key?(csr_name)
 
@@ -197,25 +195,29 @@ module Idl
     def param(param_name) = params_hash[param_name]
 
     sig { returns(T::Hash[String, RuntimeParam]) }
-    def params_hash = @params.map { |p| [p.name.freeze, p.freeze] }.to_h.freeze
+    def params_hash
+      @memo.params_hash ||= @params.map { |p| [p.name.freeze, p] }.to_h.freeze
+    end
 
     sig {
       params(
         mxlen: T.nilable(Integer),
-        possible_xlens: T::Array[Integer],
-        params: T::Array[RuntimeParam],
+        possible_xlens_cb: T.nilable(PossibleXlensCallbackType),
+        builtin_global_vars: T::Array[Var],
         builtin_enums: T::Array[EnumDef],
         builtin_funcs: T.nilable(BuiltinFunctionCallbacks),
         csrs: T::Array[Csr],
+        params: T::Array[RuntimeParam],
         name: String
       ).void
     }
-    def initialize(mxlen: nil, possible_xlens: [32, 64], params: [], builtin_enums: [], builtin_funcs: nil, csrs: [], name: "")
+    def initialize(mxlen: nil, possible_xlens_cb: nil, builtin_global_vars: [], builtin_enums: [], builtin_funcs: nil, csrs: [], params: [], name: "")
       @mutex = Thread::Mutex.new
       @mxlen = mxlen
-      @possible_xlens = possible_xlens
+      @possible_xlens_cb = possible_xlens_cb
       @callstack = [nil]
       @name = name
+      @memo = MemoizedState.new
 
       # builtin types
       @scopes = [{
@@ -237,20 +239,19 @@ module Idl
         )
 
       }]
-      params.each do |param|
-        if param.value_known?
-          add!(param.name, Var.new(param.name, param.idl_type, param.value, param: true))
-        else
-          add!(param.name, Var.new(param.name, param.idl_type, param: true))
-        end
+      builtin_global_vars.each do |v|
+        add!(v.name, v)
       end
-      @params = params.freeze
       builtin_enums.each do |enum_def|
         add!(enum_def.name, EnumerationType.new(enum_def.name, enum_def.element_names, enum_def.element_values))
       end
       @builtin_funcs = builtin_funcs
       @csrs = csrs
       @csr_hash = @csrs.map { |csr| [csr.name.freeze, csr].freeze }.to_h.freeze
+      @params = params
+
+      # set up the global clone that be used as a mutable table
+      @global_clone_pool = T.let([], T::Array[SymbolTable])
     end
 
     # @return [String] inspection string
@@ -270,9 +271,6 @@ module Idl
       # set frozen_hash so that we can quickly compare symtabs
       @frozen_hash = [@scopes.hash, @name.hash].hash
 
-      # set up the global clone that be used as a mutable table
-      @global_clone_pool = Concurrent::Array.new
-
       5.times do
         copy = SymbolTable.allocate
         copy.instance_variable_set(:@scopes, [@scopes[0]])
@@ -280,7 +278,8 @@ module Idl
         copy.instance_variable_set(:@mxlen, @mxlen)
         copy.instance_variable_set(:@mutex, @mutex)
         copy.instance_variable_set(:@name, @name)
-        copy.instance_variable_set(:@possible_xlens, @possible_xlens)
+        copy.instance_variable_set(:@memo, @memo.dup)
+        copy.instance_variable_set(:@possible_xlens_cb, @possible_xlens_cb)
         copy.instance_variable_set(:@params, @params)
         copy.instance_variable_set(:@builtin_funcs, @builtin_funcs)
         copy.instance_variable_set(:@csrs, @csrs)
@@ -328,7 +327,7 @@ module Idl
     end
 
     def keys_pretty
-      @scopes.map { |s| s.map { |k, v| v.is_a?(Var) && v.template_val? ? "#{k} (template)" : k } }
+      @scopes.map { |s| s.keys }
     end
 
     # searches the symbol table scope-by-scope to find 'name'
@@ -433,6 +432,7 @@ module Idl
     end
 
     # pretty-print the symbol table contents
+    sig { void }
     def print
       @scopes.each do |s|
         s.each do |name, obj|
@@ -446,6 +446,28 @@ module Idl
       @scopes.size == 1
     end
 
+    # Returns a Hash mapping each Var in non-global scopes to its current value.
+    # Only captures Vars (not Types or other objects).
+    # skips frozen vars since they can't be modified
+    def snapshot_values
+      snapshot = {}
+      @scopes[1..].each do |scope|
+        scope.each_value do |v|
+          if v.is_a?(Var) && !v.frozen?
+            snapshot[v] = v.value
+          end
+        end
+      end
+      snapshot
+    end
+
+    # Restores Var values from a snapshot produced by snapshot_values.
+    def restore_values(snapshot)
+      snapshot.each do |var, value|
+        var.value = value
+      end
+    end
+
     # @return [SymbolTable] a mutable clone of the global scope of this SymbolTable
     def global_clone
       # raise "symtab isn't frozen" if @global_clone.nil?
@@ -456,7 +478,7 @@ module Idl
       end
 
       # need more!
-      $logger.info "Allocating more SymbolTables"
+      Idl.logger.debug "Allocating more SymbolTables"
       5.times do
         copy = SymbolTable.allocate
         copy.instance_variable_set(:@scopes, [@scopes[0]])
@@ -464,7 +486,8 @@ module Idl
         copy.instance_variable_set(:@mxlen, @mxlen)
         copy.instance_variable_set(:@mutex, @mutex)
         copy.instance_variable_set(:@name, @name)
-        copy.instance_variable_set(:@possible_xlens, @possible_xlens)
+        copy.instance_variable_set(:@memo, @memo.dup)
+        copy.instance_variable_set(:@possible_xlens_cb, @possible_xlens_cb)
         copy.instance_variable_set(:@params, @params)
         copy.instance_variable_set(:@builtin_funcs, @builtin_funcs)
         copy.instance_variable_set(:@csrs, @csrs)

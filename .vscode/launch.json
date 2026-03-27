@@ -5,8 +5,63 @@
       "name": "ISS debug Launch",
       "type": "cppdbg",
       "request": "launch",
+      "program": "${workspaceFolder}/gen/cpp_hart_gen/rv64_Debug/build/iss",
+      "args": ["-m", "rv64", "-c", "${workspaceFolder}/cfgs/rv64-riscv-tests.yaml", "--mm", "${workspaceFolder}/cfgs/memmap.json", "-g", "--halt", "${workspaceFolder}/ext/riscv-tests/isa/rv64ui-p-ld_st"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "${workspaceFolder}/bin/gdb",
+      "logging": { "engineLogging": true },
+      "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          },
+          {
+              "description": "Set default value display to hex",
+              "text": "-gdb-set output-radix 16",
+              "ignoreFailures": true
+          }
+      ]
+    },
+    {
+      "name": "RISC-V Application debug Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/ext/riscv-tests/isa/rv64ui-p-ld_st",
+      "miDebuggerServerAddress": "localhost:2159",
+      "stopAtEntry": true,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/bin/gdb-multiarch",
+      "logging": { "engineLogging": true },
+      "setupCommands": [
+          {
+              "description": "Set RISC-V Architecture",
+              "text": "-gdb-set architecture riscv:rv64",
+              "ignoreFailures": false
+          },
+          {
+              "description": "Set debug remote logging",
+              "text": "-gdb-set debug remote 1",
+              "ignoreFailures": false
+          }
+      ]
+    },
+    {
+      "name": "Vector rv32 Debug Launch",
+      "type": "cppdbg",
+      "request": "launch",
       "program": "${workspaceFolder}/gen/cpp_hart_gen/rv32_Debug/build/iss",
-      "args": ["-m", "rv32", "-c", "${workspaceFolder}/cfgs/rv32-riscv-tests.yaml", "${workspaceFolder}/ext/riscv-tests/isa/rv32ui-p-addi"],
+      "args": [
+        "-m", "rv32",
+        "-c", "${workspaceFolder}/cfgs/rv32-vector.yaml",
+        "${workspaceFolder}/ext/riscv-tests/isa/rv32uv-p-vsetvli"],
       "stopAtEntry": true,
       "cwd": "${workspaceFolder}",
       "environment": [],
@@ -17,11 +72,6 @@
           {
               "description": "Enable pretty-printing for gdb",
               "text": "-enable-pretty-printing",
-              "ignoreFailures": true
-          },
-          {
-              "description": "Set Disassembly Flavor to Intel",
-              "text": "-gdb-set disassembly-flavor intel",
               "ignoreFailures": true
           },
           {
@@ -46,15 +96,6 @@
       "request": "launch",
       "command": "bundle exec rake",
       "script": "test:regress",
-      "args": [],
-      "askParameters": false
-    },
-    {
-      "type": "rdbg",
-      "name": "Manual",
-      "request": "launch",
-      "command": "bundle exec rake",
-      "script": "gen:html_manual MANUAL_NAME=isa VERSIONS=all",
       "args": [],
       "askParameters": false
     },

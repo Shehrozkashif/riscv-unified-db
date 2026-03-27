@@ -30,7 +30,10 @@ description: |
   |8 |_fs1_ is a signaling NaN.
   |9 |_fs1_ is a quiet NaN.
   |===
-definedBy: F
+
+definedBy:
+  extension:
+    name: F
 assembly: xd, fs1
 encoding:
   match: 111000000000-----001-----1010011
@@ -72,16 +75,3 @@ operation(): |
     assert(is_sp_quiet_nan?(sp_value), "Unexpected SP value");
     X[xd] = 1 `<< 9;
   }
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let rs1_val_X            = X(rs1);
-    let rd_val_S             = rs1_val_X [31..0];
-    F(rd) = nan_box (rd_val_S);
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

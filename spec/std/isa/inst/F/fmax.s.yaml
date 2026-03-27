@@ -19,7 +19,9 @@ description: |
   the proposed _IEEE 754-201x_ `minimumNumber` and `maximumNumber` operations, rather than the _IEEE 754-2008_
   _minNum_ and _maxNum_ operations. These operations differ in their handling of signaling NaNs.
   ====
-definedBy: F
+definedBy:
+  extension:
+    name: F
 assembly: fd, fs1, fs2
 encoding:
   match: 0010100----------001-----1010011
@@ -37,21 +39,3 @@ access:
   vu: always
 data_independent_timing: true
 operation(): |
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let rs1_val_S = F_or_X_S(rs1);
-    let rs2_val_S = F_or_X_S(rs2);
-
-    let (fflags, rd_val) : (bits_fflags, bool) =
-        riscv_f32Le (rs1_val_S, rs2_val_S);
-
-    accrue_fflags(fflags);
-    X(rd) = zero_extend(bool_to_bits(rd_val));
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

@@ -13,8 +13,11 @@ description: |
   to the most-significant bit of the least-significant word (i.e., 31). Accordingly, if the
   least-significant word is 0, the output is 32, and if the least-significant bit
   of the input is a 1, the output is 0.
-definedBy: Zbb
-base: 64
+definedBy:
+  allOf:
+    - xlen: 64
+    - extension:
+        name: Zbb
 assembly: xd, xs1
 encoding:
   match: 011000000001-----001-----0011011
@@ -34,21 +37,3 @@ operation(): |
   }
 
   X[xd] = lowest_set_bit(X[xs1][31:0]);
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let rs1_val = X(rs1);
-    result : nat = 0;
-    done : bool = false;
-    foreach (i from 0 to 31)
-      if not(done) then if rs1_val[i] == bitzero
-                      then result = result + 1
-                      else done = true;
-    X(rd) = to_bits(sizeof(xlen), result);
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

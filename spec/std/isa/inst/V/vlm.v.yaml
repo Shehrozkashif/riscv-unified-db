@@ -6,10 +6,12 @@
 $schema: "inst_schema.json#"
 kind: instruction
 name: vlm.v
-long_name: No synopsis available
+long_name: Vector load mask
 description: |
-  No description available.
-definedBy: V
+  Loads a vector mask from memory starting at address in xs1 register and stores it in vector register vd. This operation is used to load previously saved vector masks.
+definedBy:
+  extension:
+    name: Zvl32b
 assembly: vd, (xs1)
 encoding:
   match: 000000101011-----000-----0000111
@@ -25,22 +27,3 @@ access:
   vu: always
 data_independent_timing: false
 operation(): |
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let EEW = 8;
-    let EMUL_pow = 0;
-    let vl_val = unsigned(vl);
-    let evl : int = if vl_val % 8 == 0 then vl_val / 8 else vl_val / 8 + 1; /* the effective vector length is evl=ceil(vl/8) */
-    let num_elem = get_num_elem(EMUL_pow, EEW);
-
-    if illegal_vd_unmasked() then { handle_illegal(); return RETIRE_FAIL };
-
-    assert(evl >= 0);
-    process_vm(vd_or_vs3, rs1, num_elem, evl, op)
-  }
-
-# SPDX-SnippetEnd

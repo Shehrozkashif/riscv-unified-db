@@ -20,7 +20,9 @@ description: |
   the EBREAK instruction itself, not the address of the following instruction.
   As EBREAK causes a synchronous exception, it is not considered to retire,
   and should not increment the `minstret` CSR.
-definedBy: I
+definedBy:
+  extension:
+    name: I
 assembly: ""
 encoding:
   match: "00000000000100000000000001110011"
@@ -35,14 +37,3 @@ operation(): |
   } else {
     eei_ebreak();
   }
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    handle_mem_exception(PC, E_Breakpoint());
-    RETIRE_FAIL
-  }
-
-# SPDX-SnippetEnd

@@ -21,7 +21,9 @@ description: |
   function `__builtin_popcountl (unsigned long x)` for LP64 is
   implemented by cpop on RV64.
   ----
-definedBy: Zbb
+definedBy:
+  extension:
+    name: Zbb
 assembly: xd, xs1
 encoding:
   match: 011000000010-----001-----0010011
@@ -50,18 +52,3 @@ operation(): |
   }
 
   X[xd] = bitcount;
-
-# SPDX-SnippetBegin
-# SPDX-FileCopyrightText: 2017-2025 Contributors to the RISCV Sail Model <https://github.com/riscv/sail-riscv/blob/master/LICENCE>
-# SPDX-License-Identifier: BSD-2-Clause
-sail(): |
-  {
-    let rs1_val = X(rs1);
-    result : nat = 0;
-    foreach (i from 0 to (xlen_val - 1))
-      if rs1_val[i] == bitone then result = result + 1;
-    X(rd) = to_bits(sizeof(xlen), result);
-    RETIRE_SUCCESS
-  }
-
-# SPDX-SnippetEnd

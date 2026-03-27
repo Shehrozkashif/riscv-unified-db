@@ -20,7 +20,9 @@ description: |
   In modes other than M-mode, `fence.tso` is further affected by `menvcfg.FIOM`,
   `senvcfg.FIOM`<% if ext?(:H) %>, and/or `henvcfg.FIOM`<% end %>.
 
-definedBy: I
+definedBy:
+  extension:
+    name: I
 assembly: ""
 encoding:
   match: 100000110011-----000-----0001111
@@ -36,15 +38,3 @@ access:
   vu: always
 operation(): |
   fence_tso();
-
-sail(): |
-  {
-    match (pred, succ) {
-      (_ : bits(2) @ 0b11, _ : bits(2) @ 0b11) => sail_barrier(Barrier_RISCV_tso),
-      (_ : bits(2) @ 0b00, _ : bits(2) @ 0b00) => (),
-
-      _ => { print("FIXME: unsupported fence");
-             () }
-    };
-    RETIRE_SUCCESS
-  }

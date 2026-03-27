@@ -1,20 +1,18 @@
+# typed: false
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 # frozen_string_literal: true
 
-require "English"
+require_relative "test_helper"
+
 require "fileutils"
-require "minitest/autorun"
-require "open3"
 require "tmpdir"
 require "yaml"
 
 require_relative "../lib/udb/resolver"
 
 class TestYamlLoader < Minitest::Test
-  UDB_GEM_PATH = Bundler.definition.specs.find { |s| s.name == "udb" }.full_gem_path
-
   def resolve_yaml(yaml)
     Dir.mktmpdir do |dir|
       arch_dir = Pathname.new(dir) / "arch"
@@ -24,16 +22,12 @@ class TestYamlLoader < Minitest::Test
 
       File.write(test_dir / "test.yaml", yaml)
 
-      stdout, stderr, status =
-        Dir.chdir(Udb.repo_root) do
-          Open3.capture3("/bin/bash -c \"source #{Udb.repo_root}/.home/.venv/bin/activate && #{Udb.repo_root}/.home/.venv/bin/python3 #{UDB_GEM_PATH}/python/yaml_resolver.py resolve --no-progress --no-checks #{arch_dir} #{resolved_dir}\"")
-        end
-      # puts stdout
-      # puts stderr
-      # puts status
-
-      if status.to_i.zero?
+      begin
+        yaml_resolver = Udb::Yaml::Resolver.new(quiet: true)
+        yaml_resolver.resolve_files(arch_dir.to_s, resolved_dir.to_s, no_checks: true)
         YAML.load_file(resolved_dir / "test" / "test.yaml")
+      rescue StandardError
+        nil
       end
     end
   end
@@ -53,10 +47,12 @@ class TestYamlLoader < Minitest::Test
         File.write(test_dir / "test#{i + 1}.yaml", yaml)
       end
 
-      system "/bin/bash -c \"source #{Udb.repo_root}/.home/.venv/bin/activate && #{Udb.repo_root}/.home/.venv/bin/python3 #{UDB_GEM_PATH}/python/yaml_resolver.py resolve --no-checks #{arch_dir} #{resolved_dir}\""
-
-      if $CHILD_STATUS == 0
+      begin
+        yaml_resolver = Udb::Yaml::Resolver.new(quiet: true)
+        yaml_resolver.resolve_files(arch_dir.to_s, resolved_dir.to_s, no_checks: false)
         YAML.load_file(resolved_dir / "test" / "test1.yaml")
+      rescue StandardError
+        nil
       end
     end
   end
@@ -286,7 +282,7 @@ class TestYamlLoader < Minitest::Test
     refute_nil(doc)
     assert_equal("test/test2.yaml#", doc["$child_of"])
     assert_equal("Should take precedence", doc["target1"])
-    assert_equal({ "a" => "hash", "sub1" => { "key_a" => "new_value_a", "key_b" => "old_value_b" }}, doc["target2"])
+    assert_equal({ "a" => "hash", "sub1" => { "key_a" => "new_value_a", "key_b" => "old_value_b" } }, doc["target2"])
   end
 
   def test_multi_inherits_in_the_same_document
@@ -326,7 +322,7 @@ class TestYamlLoader < Minitest::Test
     assert_nil doc
   end
 
-  # Commented out until https://github.com/riscv-software-src/riscv-unified-db/issues/369 is fixed.
+  # Commented out until https://github.com/riscv/riscv-unified-db/issues/369 is fixed.
 #   def test_copy_in_the_same_document
 #     yaml = <<~YAML
 #       $defs:

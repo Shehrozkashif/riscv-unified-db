@@ -7,13 +7,15 @@ using namespace std::literals;
 
 namespace udb {
 
+#define NOP_INST_ENC 0x13
+
 <%- csrs = cfg_arch.possible_csrs -%>
 
 <%- csrs.each do |csr| -%>
-<%- fields = cfg_arch.fully_configured? ? csr.possible_fields(cfg_arch) : csr.fields.select { |field| field.exists_in_cfg?(cfg_arch) } -%>
+<%- fields = cfg_arch.fully_configured? ? csr.possible_fields : csr.fields.select { |field| field.exists_in_cfg?(cfg_arch) } -%>
 
-#define __UDB_RUNTIME_PARAM(param_name) m_hart->m_params.param_name
-#define __UDB_STATIC_PARAM(param_name) <%= name_of(:params, cfg_arch) %>::param_name ## _VALUE
+#define __UDB_RUNTIME_PARAM(param_name) m_hart->m_params.param_name.value()
+#define __UDB_STATIC_PARAM(param_name) <%= name_of(:params, cfg_arch) %>::param_name.value()
 #define __UDB_FUNC_CALL m_hart->
 #define __UDB_CONSTEXPR_FUNC_CALL <%= name_of(:hart, cfg_arch) %><SocType>::
 #define __UDB_CSR_BY_NAME(csr_name) m_hart->m_csrs.csr_name
@@ -82,15 +84,15 @@ void <%= name_of(:csr_field, cfg_arch, csr.name, field.name) %><SocType>::reset(
 #undef __UDB_STRUCT
 #undef __UDB_HART
 
-#define __UDB_RUNTIME_PARAM(param_name) m_parent->m_params.param_name
-#define __UDB_STATIC_PARAM(param_name) <%= name_of(:params, cfg_arch) %>::param_name
+#define __UDB_RUNTIME_PARAM(param_name) m_parent->m_params.param_name.value()
+#define __UDB_STATIC_PARAM(param_name) <%= name_of(:params, cfg_arch) %>::param_name.value()
 #define __UDB_CSR_BY_ADDR(addr) m_parent->csr(addr)
 #define __UDB_CSR_BY_NAME(csr_name) m_parent->m_csrs.csr_name
 #define __UDB_CSR_FIELD_READ(field_name) m_##field_name
 #define __UDB_FUNC_CALL m_parent->
 #define __UDB_CONSTEXPR_FUNC_CALL <%= name_of(:hart, cfg_arch) %><SocType>::
 #define __UDB_XLEN m_parent->xlen().to_defined()
-#define __UDB_ENCODING Bits<<%= name_of(:hart, cfg_arch) %><SocType>::__MAX_INST_ENCODING_SIZE>{m_parent->m_cur_inst->encoding()}
+#define __UDB_ENCODING Bits<<%= name_of(:hart, cfg_arch) %><SocType>::__MAX_INST_ENCODING_SIZE>{m_parent->m_cur_inst ? m_parent->m_cur_inst->encoding() : NOP_INST_ENC }
 #define __UDB_CONST_GLOBAL(global_name) <%= name_of(:hart, cfg_arch) %><SocType>::global_name
 #define __UDB_MUTABLE_GLOBAL(global_name) m_parent->global_name
 #define __UDB_STRUCT(struct_name) <%= cfg_arch.name.camelize %>_ ## struct_name ## _Struct
@@ -187,7 +189,7 @@ void <%= name_of(:csr, cfg_arch, csr.name) %><SocType>::_hw_write(const Possibly
 <%- if cfg_arch.multi_xlen? && csr.format_changes_with_xlen? -%>
 template <SocModel SocType>
 bool <%= name_of(:csr, cfg_arch, csr.name) %><SocType>::_sw_write(const PossiblyUnknownBits<<%= csr.max_length %>>& value, const Bits<8>& xlen) {
-  <%- fields = cfg_arch.fully_configured? ? csr.possible_fields(cfg_arch) : csr.fields.select { |field| field.exists_in_cfg?(cfg_arch) } -%>
+  <%- fields = cfg_arch.fully_configured? ? csr.possible_fields : csr.fields.select { |field| field.exists_in_cfg?(cfg_arch) } -%>
   <%- fields.each do |field| -%>
   <%- next unless cfg_arch.possible_xlens.any? { |xlen| field.defined_in_base?(xlen) } -%>
   <%- cfg_arch.possible_xlens.each do |xlen| -%>
@@ -229,7 +231,7 @@ template <SocModel SocType>
 bool <%= name_of(:csr, cfg_arch, csr.name) %><SocType>::_sw_write(const PossiblyUnknownBits<<%= csr.max_length %>>& value) {
   View<<%= cfg_arch.possible_xlens[0] %>> csr_value(value);
 
-  <%- fields = cfg_arch.fully_configured? ? csr.possible_fields(cfg_arch) : csr.fields.select { |field| field.exists_in_cfg?(cfg_arch) } -%>
+  <%- fields = cfg_arch.fully_configured? ? csr.possible_fields : csr.fields.select { |field| field.exists_in_cfg?(cfg_arch) } -%>
   <%- fields.each do |field| -%>
   <%- next unless cfg_arch.possible_xlens.any? { |xlen| field.defined_in_base?(xlen) } -%>
   <%- if field.has_custom_sw_write? -%>

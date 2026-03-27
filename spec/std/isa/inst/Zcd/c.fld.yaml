@@ -13,11 +13,8 @@ description: |
   to the base address in register xs1.
   It expands to `fld` `fd, offset(xs1)`.
 definedBy:
-  anyOf:
-    - allOf:
-        - C
-        - D
-    - Zcd
+  extension:
+    name: Zcd
 assembly: fd, imm(xs1)
 encoding:
   match: 001-----------00
@@ -41,4 +38,4 @@ operation(): |
 
   XReg virtual_address = X[creg2reg(xs1)] + imm;
 
-  f[fd] = sext(read_memory<64>(virtual_address, $encoding), 64);
+  f[fd] = sext(read_memory(64, virtual_address, $encoding), 64);
