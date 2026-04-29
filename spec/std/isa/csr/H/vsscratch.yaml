@@ -27,4 +27,3 @@ fields:
     location_rv64: 63-0
     description: |
       Virtual supervisor scratch register.
-
