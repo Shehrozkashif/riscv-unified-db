@@ -17,28 +17,34 @@ definedBy:
   extension:
     name: H
 sw_read(): |
-  # Calculate SGEIP
-  bool sgeip = ($bits(CSR[hgeie]) & $bits(CSR[hgeip])) != 0;
+  Bits<SXLEN> res = 0;
 
-  # Calculate VSEIP
-  Bits<SXLEN> hstatus_val = $bits(CSR[hstatus]);
-  unsigned int vgein = hstatus_val[17:12];
-  bool vseip = $bits(CSR[hvip])[10] | $bits(CSR[hgeip])[vgein];
-
-  # Calculate VSTIP
-  bool vstip = $bits(CSR[hvip])[6];
-  if (implemented?(ExtensionName::Sstc)) {
-    vstip |= ($bits(read_mtime()) + $bits(CSR[htimedelta])) >= $bits(CSR[vstimecmp]);
+  # SGEIP: 1 iff bitwise AND of hgeip and hgeie is nonzero
+  if (($bits(CSR[hgeie]) & $bits(CSR[hgeip])) != 0) {
+    res[12] = 1'b1;
   }
 
-  # VSSIP is alias of hvip.VSSIP
-  bool vssip = $bits(CSR[hvip])[2];
+  # VSEIP: logical OR of hvip.VSEIP and platform-specific sources
+  if (CSR[hvip].VSEIP == 1'b1) {
+    res[10] = 1'b1;
+  }
 
-  Bits<SXLEN> res = 0;
-  if (sgeip) res[12] = 1;
-  if (vseip) res[10] = 1;
-  if (vstip) res[6] = 1;
-  if (vssip) res[2] = 1;
+  # VSTIP: logical OR of hvip.VSTIP and vstimecmp comparison (if Sstc)
+  if (implemented?(ExtensionName::Sstc)) {
+    if ((CSR[hvip].VSTIP == 1'b1) | ((read_mtime() + CSR[htimedelta].DELTA) >= CSR[vstimecmp].VSTIMECMP)) {
+      res[6] = 1'b1;
+    }
+  } else {
+    if (CSR[hvip].VSTIP == 1'b1) {
+      res[6] = 1'b1;
+    }
+  }
+
+  # VSSIP: alias of hvip.VSSIP
+  if (CSR[hvip].VSSIP == 1'b1) {
+    res[2] = 1'b1;
+  }
+
   return res;
 length: SXLEN
 fields:
