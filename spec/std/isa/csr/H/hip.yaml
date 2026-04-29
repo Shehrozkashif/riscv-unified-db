@@ -7,12 +7,39 @@ $schema: "csr_schema.json#"
 kind: csr
 name: hip
 long_name: Hypervisor Interrupt Pending Register
+writable: true
 description: |
   The `hip` register is an HSXLEN-bit read/write register that indicates pending interrupts at the hypervisor level.
   It contains interrupt-pending bits for both VS-level and hypervisor-specific interrupts.
 address: 0x608
 priv_mode: S
-definedBy: H
+definedBy:
+  extension:
+    name: H
+sw_read(): |
+  # Calculate SGEIP
+  bool sgeip = ($bits(CSR[hgeie]) & $bits(CSR[hgeip])) != 0;
+
+  # Calculate VSEIP
+  Bits<SXLEN> hstatus_val = $bits(CSR[hstatus]);
+  unsigned int vgein = hstatus_val[17:12];
+  bool vseip = $bits(CSR[hvip])[10] | $bits(CSR[hgeip])[vgein];
+
+  # Calculate VSTIP
+  bool vstip = $bits(CSR[hvip])[6];
+  if (implemented?(ExtensionName::Sstc)) {
+    vstip |= ($bits(read_mtime()) + $bits(CSR[htimedelta])) >= $bits(CSR[vstimecmp]);
+  }
+
+  # VSSIP is alias of hvip.VSSIP
+  bool vssip = $bits(CSR[hvip])[2];
+
+  Bits<SXLEN> res = 0;
+  if (sgeip) res[12] = 1;
+  if (vseip) res[10] = 1;
+  if (vstip) res[6] = 1;
+  if (vssip) res[2] = 1;
+  return res;
 length: SXLEN
 fields:
   SGEIP:
@@ -42,8 +69,11 @@ fields:
 
   VSSIP:
     location: 2
-    type: RO
+    type: RW
     reset_value: 0
+    sw_write(csr_value): |
+      # VSSIP in hip is an alias of VSSIP in hvip
+      CSR[hvip].VSSIP = $bits(csr_value)[2];
     description: |
       Pending interrupt bit for VS-level software interrupts (VSSI).
       This bit is an alias of the `vssip` bit in `hvip`.

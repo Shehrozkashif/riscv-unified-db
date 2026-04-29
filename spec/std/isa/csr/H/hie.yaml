@@ -12,8 +12,11 @@ description: |
   It corresponds to the enable bits for VS-level and hypervisor-specific interrupts, and supplements
   the HS-level `sie` register.
 address: 0x604
+writable: true
 priv_mode: S
-definedBy: H
+definedBy:
+  extension:
+    name: H
 length: SXLEN
 fields:
   SGEIE:

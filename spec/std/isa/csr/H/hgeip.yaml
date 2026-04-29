@@ -7,6 +7,7 @@ $schema: "csr_schema.json#"
 kind: csr
 name: hgeip
 long_name: Hypervisor Guest External Interrupt Pending Register
+writable: false
 description: |
   The hgeip register is an HSXLEN-bit read-only register, formatted as that indicates pending guest external interrupts for this hart.
 
@@ -18,18 +19,15 @@ description: |
   This number is known as GEILEN. The least-significant bits are implemented first, apart from bit 0. Hence, if GEILEN is nonzero, bits GEILEN:1 shall be writable in hgeie, and all other bit positions shall be read-only zeros in both hgeip and hgeie
 address: 0xE12
 priv_mode: S
-definedBy: H
+definedBy:
+  extension:
+    name: H
 length: SXLEN
 fields:
   GEI_PENDING:
+    long_name: Guest external interrupt pending bits
     location_rv32: 31-1
     location_rv64: 63-1
     type: RO
-    reset_value: 0
-    description: |
-      Each bit of hgeip summarizes all pending interrupts directed to one virtual hart, as collected and reported by an interrupt controller.
-      To distinguish specific pending interrupts from multiple devices, software must query the interrupt controller.
-
-      The number of bits implemented in hgeip and hgeie for guest external interrupts is UNSPECIFIED and may be zero. This number is known as GEILEN.
-      The least-significant bits are implemented first, apart from bit 0.
-      Hence, if GEILEN is nonzero, bits GEILEN:1 shall be writable in hgeie, and all other bit positions shall be read-only zeros in both hgeip and hgeie.
+    reset_value: UNDEFINED_LEGAL
+    description: Pending bits; see description of hgeip
