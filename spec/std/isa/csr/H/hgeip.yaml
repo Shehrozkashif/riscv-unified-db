@@ -29,5 +29,5 @@ fields:
     location_rv32: 31-1
     location_rv64: 63-1
     type: RO
-    reset_value: UNDEFINED_LEGAL
+    reset_value: 0
     description: Pending bits; see description of hgeip
