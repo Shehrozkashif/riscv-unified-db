@@ -64,7 +64,7 @@ fields:
 
   SGEI:
     location: 12
-    type: RW
+    type: RO
     reset_value: 0
     long_name: Supervisor Guest External Interrupt
     description: Supervisor Guest External Interrupt

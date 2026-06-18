@@ -8,7 +8,7 @@ kind: csr
 name: vstimecmp
 long_name: Virtual Supervisor Timer Register
 address: 0x24D
-virtual_address: 0x24D
+virtual_address: 0x14D
 priv_mode: VS
 writable: true
 definedBy:

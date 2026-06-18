@@ -320,6 +320,24 @@ jobs:
       uses: "./.github/actions/mise-setup"
     - name: Run udb-helpers unit tests
       run: "./do test:udb_helpers:unit"
+  regress-udb-gen-unit:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone Github Repo Action
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - name: Set up mise environment
+      uses: "./.github/actions/mise-setup"
+    - name: Check udb-gen unit tests
+      run: "./do test:udb_gen:unit"
+  regress-udb-gen-integration:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone Github Repo Action
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - name: Set up mise environment
+      uses: "./.github/actions/mise-setup"
+    - name: Check udb-gen integration tests
+      run: "./do test:udb_gen:integration"
   regress-sorbet:
     runs-on: ubuntu-latest
     steps:
@@ -495,6 +513,15 @@ jobs:
       uses: "./.github/actions/mise-setup"
     - name: Generate sverilog_header code
       run: "./do gen:sverilog"
+  regress-cfg-headers:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone Github Repo Action
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - name: Set up mise environment
+      uses: "./.github/actions/mise-setup"
+    - name: Generate cfg header golden files
+      run: "./bin/chore gen -f cfg-headers"
   regress-cpp-unit:
     runs-on: ubuntu-latest
     steps:
@@ -532,6 +559,19 @@ jobs:
       run: git submodule update --init ext/riscv-tests
     - name: Run RV64 riscv-tests
       run: "./do test:riscv_tests CONFIG=rv64 IGNOREUNDEFINED=YES JOBS=4 BUILD_TYPE=debug"
+  regress-riscv-tests-vector:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone Github Repo Action
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - name: Set up mise environment
+      uses: "./.github/actions/mise-setup"
+      with:
+        toolchain: 'true'
+    - name: check out riscv-tests
+      run: git submodule update --init ext/riscv-tests
+    - name: Run vector riscv-tests
+      run: "./do test:riscv_vector_tests CONFIG=rv64-vector IGNOREUNDEFINED=YES JOBS=4 BUILD_TYPE=debug"
   regress-profile-extensions:
     runs-on: ubuntu-latest
     steps:
@@ -762,6 +802,15 @@ jobs:
       uses: "./.github/actions/mise-setup"
     - name: Check schema versions against published URLs
       run: "./do gen:schemas && ./bin/ruby tools/scripts/check_schema_versions.rb"
+  regress-schema-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Clone Github Repo Action
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - name: Set up mise environment
+      uses: "./.github/actions/mise-setup"
+    - name: Generate schema documentation
+      run: "./bin/chore gen -f schema-docs"
   build-idl-doc:
     runs-on: ubuntu-latest
     if: (github.event_name == 'merge_group') || ((github.event_name == 'push') && (github.ref_name == 'main'))
@@ -831,6 +880,8 @@ jobs:
     - regress-scripts-unit
     - regress-idlc-unit
     - regress-udb-helpers-unit
+    - regress-udb-gen-unit
+    - regress-udb-gen-integration
     - regress-sorbet
     - regress-ext-explorer
     - regress-idl-typecheck-smoke
@@ -846,9 +897,11 @@ jobs:
     - regress-gen-go
     - regress-gen-c-header
     - regress-gen-sverilog
+    - regress-cfg-headers
     - regress-cpp-unit
     - regress-riscv-tests-32
     - regress-riscv-tests-64
+    - regress-riscv-tests-vector
     - regress-profile-extensions
     - regress-build-udb-gem
     - regress-regress
@@ -864,6 +917,7 @@ jobs:
     - build-instruction-appendix
     - build-profile
     - regress-schema-versions
+    - regress-schema-docs
     - build-idl-doc
     - check-gem-versions
     - regress-smoke-perf

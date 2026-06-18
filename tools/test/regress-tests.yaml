@@ -40,6 +40,24 @@ tests:
       - name: Run udb-helpers unit tests
         run: ./do test:udb_helpers:unit
 
+  regress-udb-gen-unit:
+    ci_stage: pr
+    tags:
+      - unit
+      - smoke
+    test:
+      - name: Check udb-gen unit tests
+        run: ./do test:udb_gen:unit
+
+  regress-udb-gen-integration:
+    ci_stage: pr
+    tags:
+      - integration
+      - smoke
+    test:
+      - name: Check udb-gen integration tests
+        run: ./do test:udb_gen:integration
+
   regress-sorbet:
     ci_stage: pr
     tags:
@@ -183,6 +201,14 @@ tests:
       - name: Generate sverilog_header code
         run: ./do gen:sverilog
 
+  regress-cfg-headers:
+    ci_stage: pr
+    tags:
+      - smoke
+    test:
+      - name: Generate cfg header golden files
+        run: ./bin/chore gen -f cfg-headers
+
   regress-cpp-unit:
     ci_stage: pr
     toolchain_container: true
@@ -211,6 +237,16 @@ tests:
     test:
       - name: Run RV64 riscv-tests
         run: ./do test:riscv_tests CONFIG=rv64 IGNOREUNDEFINED=YES JOBS=4 BUILD_TYPE=debug
+
+  regress-riscv-tests-vector:
+    ci_stage: pr
+    toolchain_container: true
+    gh_pre:
+      - name: check out riscv-tests
+        run: git submodule update --init ext/riscv-tests
+    test:
+      - name: Run vector riscv-tests
+        run: ./do test:riscv_vector_tests CONFIG=rv64-vector IGNOREUNDEFINED=YES JOBS=4 BUILD_TYPE=debug
 
   regress-profile-extensions:
     ci_stage: pr
@@ -367,6 +403,14 @@ tests:
     test:
       - name: Check schema versions against published URLs
         run: ./do gen:schemas && ./bin/ruby tools/scripts/check_schema_versions.rb
+
+  regress-schema-docs:
+    ci_stage: pr
+    tags:
+      - smoke
+    test:
+      - name: Generate schema documentation
+        run: ./bin/chore gen -f schema-docs
 
   build-idl-doc:
     ci_stage: merge_queue
